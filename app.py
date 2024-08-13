@@ -3,11 +3,12 @@ from langchain_anthropic import ChatAnthropic
 from datetime import datetime
 import json
 import re
+import os
 
 # Set page config
 st.set_page_config(page_title="Taalassistent voor Lemosh", page_icon="🇳🇱", layout="wide")
 
-# Custom CSS
+# Custom CSS (unchanged)
 st.markdown("""
 <style>
     body {
@@ -85,6 +86,14 @@ if 'user_mistakes' not in st.session_state:
 if 'user_improvements' not in st.session_state:
     st.session_state.user_improvements = []
 
+# Load previous learning data
+LEARNING_DATA_FILE = "learning_data.json"
+if os.path.exists(LEARNING_DATA_FILE):
+    with open(LEARNING_DATA_FILE, "r") as f:
+        learning_data = json.load(f)
+        st.session_state.user_mistakes = learning_data.get("mistakes", {})
+        st.session_state.user_improvements = learning_data.get("improvements", [])
+
 # Initialize ChatAnthropic with Streamlit secrets
 chat_model = ChatAnthropic(
     model="claude-3-sonnet-20240229",
@@ -102,17 +111,15 @@ def get_ai_response(prompt, conversation_history, system_message):
     return response.content
 
 def get_conversation_topics():
-    system_message = """Je bent een behulpzame en vriendelijke Nederlandse taaldocent. Genereer 6 interessante gespreksonderwerpen voor Lemosh, een Nederlandse taalstudent. 
-    Zorg ervoor dat de onderwerpen gevarieerd zijn en verschillende aspecten van taalvaardigheid aanspreken. 
-    Geef de opties alleen in het Nederlands."""
+    system_message = """Je bent een vriendelijke en empathische Nederlandse taaldocent voor Lemosh. Genereer 6 interessante gespreksonderwerpen die aansluiten bij de interesses van Lemosh en verschillende aspecten van taalvaardigheid aanspreken. Geef de opties alleen in het Nederlands."""
 
-    prompt = "Genereer 6 interessante gespreksonderwerpen voor Lemosh, een Nederlandse taalstudent."
+    prompt = "Genereer 6 interessante gespreksonderwerpen voor Lemosh, een enthousiaste Nederlandse taalstudent."
 
     options = get_ai_response(prompt, [], system_message)
     return [option.strip() for option in options.split('\n') if option.strip()]
 
 def update_user_progress(user_input, ai_response):
-    # Extract mistakes and corrections
+    # Extract mistakes and corrections (implementation unchanged)
     mistakes = re.findall(r"Fout: (.*?), Correctie: (.*?)(?:\n|$)", ai_response)
     for mistake, correction in mistakes:
         if mistake in st.session_state.user_mistakes:
@@ -123,9 +130,25 @@ def update_user_progress(user_input, ai_response):
                 "count": 1
             }
     
-    # Extract improvements
+    # Extract improvements (implementation unchanged)
     improvements = re.findall(r"Verbetering: (.*?)(?:\n|$)", ai_response)
     st.session_state.user_improvements.extend(improvements)
+
+    # Save learning data to file
+    with open(LEARNING_DATA_FILE, "w") as f:
+        json.dump({
+            "mistakes": st.session_state.user_mistakes,
+            "improvements": st.session_state.user_improvements
+        }, f)
+
+def format_feedback(feedback):
+    # Remove explicit "Fout" and "Correctie" labels
+    feedback = re.sub(r'Fout: "(.*?)" Correctie: "(.*?)"', r'Je schreef: "\1". Wat dacht je van: "\2"?', feedback)
+    
+    # Make improvements more encouraging
+    feedback = re.sub(r'Verbetering: (.*)', r'Goed gedaan! \1', feedback)
+    
+    return feedback
 
 # Main app layout
 st.title("🇳🇱 Taalassistent voor Lemosh")
@@ -157,7 +180,8 @@ else:
         if message["role"] == "user":
             st.markdown(f'<div class="chat-message user-message">🙋‍♂️ Lemosh: {message["content"]}</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="chat-message ai-message">🤖 Taalassistent: {message["content"]}</div>', unsafe_allow_html=True)
+            formatted_content = format_feedback(message["content"])
+            st.markdown(f'<div class="chat-message ai-message">🤖 Taalassistent: {formatted_content}</div>', unsafe_allow_html=True)
 
     # User input
     user_input = st.text_input("Typ hier je Nederlandse zin, Lemosh:", key="user_input")
@@ -167,12 +191,23 @@ else:
             st.session_state.conversation_history.append({"role": "user", "content": user_input})
 
             # Get AI response
-            system_message = f"""Je bent een behulpzame en vriendelijke Nederlandse taaldocent voor Lemosh. Het gespreksonderwerp is: '{st.session_state.current_topic}'.
+            system_message = f"""Je bent een vriendelijke en empathische Nederlandse taaldocent voor Lemosh. Het gespreksonderwerp is: '{st.session_state.current_topic}'.
             Geef vriendelijke en opbouwende feedback om Lemosh te helpen zijn Nederlandse taalvaardigheden te verbeteren. 
-            Concentreer je op grammatica, woordenschat en zinsstructuur. Geef altijd de juiste versie van de zin als er fouten zijn. 
-            Houd je antwoorden kort en bondig, maar wel informatief. 
-            Reageer op een conversationele manier en moedig Lemosh aan om door te gaan met oefenen.
-            Markeer fouten met 'Fout: [fout], Correctie: [correctie]' en verbeteringen met 'Verbetering: [verbetering]'."""
+            Concentreer je op grammatica, woordenschat en zinsstructuur. Stel vragen om Lemosh aan te moedigen meer te schrijven.
+            Geef suggesties voor verbetering op een positieve manier, alsof je een behulpzame vriend bent.
+            Gebruik de eerder gemaakte fouten en verbeteringen om je feedback te personaliseren.
+            Houd je antwoorden kort en bondig, maar wel informatief en bemoedigend."""
+
+            # Include previous mistakes and improvements in the system message
+            if st.session_state.user_mistakes:
+                system_message += "\n\nVeelgemaakte fouten van Lemosh:"
+                for mistake, data in list(st.session_state.user_mistakes.items())[:5]:
+                    system_message += f"\n- {mistake} (Correctie: {data['correction']})"
+
+            if st.session_state.user_improvements:
+                system_message += "\n\nRecente verbeteringen van Lemosh:"
+                for improvement in st.session_state.user_improvements[-5:]:
+                    system_message += f"\n- {improvement}"
 
             ai_response = get_ai_response(user_input, st.session_state.conversation_history, system_message)
 
@@ -191,9 +226,9 @@ else:
         st.subheader("Je voortgang, Lemosh:")
         col1, col2 = st.columns(2)
         with col1:
-            st.write("Veelgemaakte fouten:")
+            st.write("Aandachtspunten:")
             for mistake, data in sorted(st.session_state.user_mistakes.items(), key=lambda x: x[1]["count"], reverse=True)[:5]:
-                st.write(f"- {mistake} (Correctie: {data['correction']}, Aantal: {data['count']})")
+                st.write(f"- \"{mistake}\" → \"{data['correction']}\" (Aantal: {data['count']})")
         with col2:
             st.write("Recente verbeteringen:")
             for improvement in st.session_state.user_improvements[-5:]:
