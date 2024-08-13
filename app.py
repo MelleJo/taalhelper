@@ -3,7 +3,6 @@ from langchain_anthropic import ChatAnthropic
 from datetime import datetime
 import json
 import re
-import random
 
 # Initialize session state
 if 'conversation_history' not in st.session_state:
@@ -13,7 +12,9 @@ if 'user_progress' not in st.session_state:
         "grammar": [],
         "vocabulary": [],
         "sentence_structure": [],
-        "common_mistakes": {}
+        "common_mistakes": {},
+        "interests": [],
+        "improvement_areas": []
     }
 if 'current_task' not in st.session_state:
     st.session_state.current_task = None
@@ -22,15 +23,15 @@ if 'completed_tasks' not in st.session_state:
 
 # Initialize ChatAnthropic with Streamlit secrets
 chat_model = ChatAnthropic(
-    model="claude-3-sonnet-20240229",
-    max_tokens=250,
+    model="claude-3-haiku-20240307",
+    max_tokens=1000,
     temperature=0.7,
     anthropic_api_key=st.secrets["anthropic_api_key"]
 )
 
-def get_ai_response(prompt, conversation_history):
+def get_ai_response(prompt, conversation_history, system_message):
     messages = [
-        {"role": "system", "content": "Je bent een behulpzame en vriendelijke Nederlandse taaldocent. Geef vriendelijke en opbouwende feedback om de gebruiker te helpen zijn Nederlandse taalvaardigheden te verbeteren. Concentreer je op grammatica, woordenschat en zinsstructuur. Geef altijd de juiste versie van de zin als er fouten zijn. Geef je feedback in het Nederlands, maar voeg na elke feedbacksectie een Engelse vertaling toe tussen haakjes. Reageer op een conversationele manier en moedig de gebruiker aan om door te gaan met oefenen."},
+        {"role": "system", "content": system_message},
     ] + conversation_history + [{"role": "user", "content": prompt}]
 
     response = chat_model.invoke(messages)
@@ -58,35 +59,39 @@ def update_user_progress(user_input, ai_feedback):
                 "count": 1
             }
 
-def get_conversation_starter():
-    starters = [
-        "Beschrijf je favoriete Nederlandse gerecht.",
-        "Vertel me over een typisch Nederlandse traditie.",
-        "Wat vind je het leukste aan de Nederlandse taal?",
-        "Beschrijf je ideale dag in Nederland.",
-        "Welk Nederlands woord vind je het moeilijkst om uit te spreken?",
-    ]
-    return random.choice(starters)
+    # Extract interests and improvement areas
+    interests = re.findall(r"Interesse: (.*?)(?:\n|$)", ai_feedback)
+    improvement_areas = re.findall(r"Verbeterpunt: (.*?)(?:\n|$)", ai_feedback)
 
-def get_task():
-    tasks = [
-        "Schrijf een korte paragraaf over je hobby's in het Nederlands.",
-        "Beschrijf je dagelijkse routine in het Nederlands.",
-        "Vertel over je laatste vakantie in het Nederlands.",
-        "Schrijf een korte dialoog tussen twee vrienden in het Nederlands.",
-        "Beschrijf je favoriete seizoen in het Nederlands.",
-    ]
-    return random.choice(tasks)
+    st.session_state.user_progress["interests"].extend(interests)
+    st.session_state.user_progress["improvement_areas"].extend(improvement_areas)
+
+def get_conversation_options():
+    system_message = """Je bent een behulpzame en vriendelijke Nederlandse taaldocent. Genereer 5 interessante gespreksonderwerpen of taken voor een Nederlandse taalstudent. 
+    Houd rekening met de interesses en verbeterpunten van de student, indien bekend. Zorg ervoor dat de onderwerpen gevarieerd zijn en verschillende aspecten van taalvaardigheid aanspreken. 
+    Geef de opties in het Nederlands, met een Engelse vertaling tussen haakjes."""
+
+    prompt = f"""
+    Interesses van de student: {', '.join(st.session_state.user_progress['interests'])}
+    Verbeterpunten van de student: {', '.join(st.session_state.user_progress['improvement_areas'])}
+
+    Genereer 5 gespreksonderwerpen of taken op basis van deze informatie.
+    """
+
+    options = get_ai_response(prompt, [], system_message)
+    return options.split('\n')
 
 st.title("Nederlandse Taalhelper")
 
-# Conversation starter
-if st.button("Geef me een gespreksonderwerp"):
-    st.session_state.current_task = get_conversation_starter()
+# Generate conversation options
+if 'conversation_options' not in st.session_state or st.button("Vernieuw opties"):
+    st.session_state.conversation_options = get_conversation_options()
 
-# Task
-if st.button("Geef me een taak"):
-    st.session_state.current_task = get_task()
+# Display conversation options
+st.subheader("Kies een gespreksonderwerp of taak:")
+for i, option in enumerate(st.session_state.conversation_options, 1):
+    if st.button(f"{i}. {option}"):
+        st.session_state.current_task = option
 
 if st.session_state.current_task:
     st.write(f"Huidige opdracht: {st.session_state.current_task}")
@@ -99,7 +104,13 @@ if st.button("Verstuur"):
         st.session_state.conversation_history.append({"role": "user", "content": user_input})
 
         # Get AI response
-        ai_response = get_ai_response(user_input, st.session_state.conversation_history)
+        system_message = """Je bent een behulpzame en vriendelijke Nederlandse taaldocent. Geef vriendelijke en opbouwende feedback om de gebruiker te helpen zijn Nederlandse taalvaardigheden te verbeteren. 
+        Concentreer je op grammatica, woordenschat en zinsstructuur. Geef altijd de juiste versie van de zin als er fouten zijn. 
+        Geef je feedback in het Nederlands, maar voeg na elke feedbacksectie een Engelse vertaling toe tussen haakjes. 
+        Reageer op een conversationele manier en moedig de gebruiker aan om door te gaan met oefenen. 
+        Identificeer mogelijke interesses van de gebruiker met het label 'Interesse:' en suggereer verbeterpunten met het label 'Verbeterpunt:'."""
+
+        ai_response = get_ai_response(user_input, st.session_state.conversation_history, system_message)
 
         # Add AI response to conversation history
         st.session_state.conversation_history.append({"role": "assistant", "content": ai_response})
@@ -127,17 +138,6 @@ for message in st.session_state.conversation_history:
             if dutch_text:
                 with st.expander(f"🇳🇱 {dutch_text}", expanded=True):
                     st.write(f"🇬🇧 {english_text}")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("🔊 Spreek uit", key=f"speak_{i}"):
-                            st.write("Spraakfunctie nog niet geïmplementeerd.")
-                    with col2:
-                        if st.button("💡 Meer voorbeelden", key=f"examples_{i}"):
-                            st.write("Functie voor meer voorbeelden nog niet geïmplementeerd.")
-                    with col3:
-                        if st.button("❓ Vraag verduidelijking", key=f"clarify_{i}"):
-                            st.write("Verduidelijkingsfunctie nog niet geïmplementeerd.")
 
 if not user_input:
     st.warning("Voer alstublieft een Nederlandse zin in.")
@@ -157,6 +157,14 @@ if st.session_state.user_progress["grammar"] or st.session_state.user_progress["
     st.sidebar.subheader("Veelvoorkomende Fouten")
     for mistake, data in sorted(st.session_state.user_progress["common_mistakes"].items(), key=lambda x: x[1]["count"], reverse=True)[:5]:
         st.sidebar.write(f"- {mistake} (Correctie: {data['correction']}, Aantal: {data['count']})")
+
+    st.sidebar.subheader("Interesses")
+    for interest in set(st.session_state.user_progress["interests"]):
+        st.sidebar.write(f"- {interest}")
+
+    st.sidebar.subheader("Verbeterpunten")
+    for area in set(st.session_state.user_progress["improvement_areas"]):
+        st.sidebar.write(f"- {area}")
 
     st.sidebar.subheader("Voltooide Taken")
     for task in st.session_state.completed_tasks:
