@@ -99,12 +99,14 @@ if not st.session_state.current_topic:
             if st.button(topic, key=f"topic_{i}", use_container_width=True):
                 st.session_state.current_topic = topic
                 st.session_state.conversation_history = []
-                st.experimental_rerun()
+                st.rerun()
 
 # Chat interface
 else:
     st.subheader(f"Gesprek over: {st.session_state.current_topic}")
-    st.button("Terug naar onderwerpen", on_click=lambda: setattr(st.session_state, 'current_topic', None))
+    if st.button("Terug naar onderwerpen"):
+        st.session_state.current_topic = None
+        st.rerun()
 
     # Display conversation history
     for message in st.session_state.conversation_history:
@@ -132,7 +134,7 @@ else:
             # Add AI response to conversation history
             st.session_state.conversation_history.append({"role": "assistant", "content": ai_response})
 
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.warning("Voer alstublieft een Nederlandse zin in.")
 
