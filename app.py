@@ -68,14 +68,18 @@ def update_user_progress(user_input, ai_feedback):
 
 def get_conversation_options():
     system_message = """Je bent een behulpzame en vriendelijke Nederlandse taaldocent. Genereer 5 interessante gespreksonderwerpen of taken voor een Nederlandse taalstudent. 
-    Houd rekening met de interesses en verbeterpunten van de student, indien bekend. Zorg ervoor dat de onderwerpen gevarieerd zijn en verschillende aspecten van taalvaardigheid aanspreken. 
+    Houd rekening met de interesses en verbeterpunten van de student, indien bekend. Als er geen interesses of verbeterpunten bekend zijn, genereer dan algemene onderwerpen die geschikt zijn voor verschillende taalniveaus. 
+    Zorg ervoor dat de onderwerpen gevarieerd zijn en verschillende aspecten van taalvaardigheid aanspreken. 
     Geef de opties in het Nederlands, met een Engelse vertaling tussen haakjes."""
 
-    prompt = f"""
-    Interesses van de student: {', '.join(st.session_state.user_progress['interests'])}
-    Verbeterpunten van de student: {', '.join(st.session_state.user_progress['improvement_areas'])}
+    interests = ', '.join(st.session_state.user_progress['interests']) if st.session_state.user_progress['interests'] else "Nog niet bekend"
+    improvement_areas = ', '.join(st.session_state.user_progress['improvement_areas']) if st.session_state.user_progress['improvement_areas'] else "Nog niet bekend"
 
-    Genereer 5 gespreksonderwerpen of taken op basis van deze informatie.
+    prompt = f"""
+    Interesses van de student: {interests}
+    Verbeterpunten van de student: {improvement_areas}
+
+    Genereer 5 gespreksonderwerpen of taken op basis van deze informatie. Als er geen specifieke interesses of verbeterpunten bekend zijn, genereer dan algemene onderwerpen die geschikt zijn voor verschillende taalniveaus.
     """
 
     options = get_ai_response(prompt, [], system_message)
