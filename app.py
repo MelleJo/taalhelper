@@ -1,5 +1,5 @@
 import streamlit as st
-import openai
+from anthropic import Anthropic
 from datetime import datetime
 import json
 import re
@@ -15,24 +15,22 @@ if 'user_progress' not in st.session_state:
         "common_mistakes": {}
     }
 
-# Set up OpenAI API key
-openai.api_key = st.secrets["openai_api_key"]
+# Set up Anthropic API key
+anthropic = Anthropic(api_key=st.secrets["anthropic_api_key"])
 
 def get_ai_response(prompt, conversation_history):
     messages = [
         {"role": "system", "content": "You are a helpful Dutch language tutor. Provide kind and constructive feedback to help the user improve their Dutch language skills. Focus on grammar, vocabulary, and sentence structure. Always provide the correct version of the sentence if there are mistakes."},
     ] + conversation_history + [{"role": "user", "content": prompt}]
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
+    response = anthropic.messages.create(
+        model="claude-3-sonnet-20240229",
         max_tokens=250,
-        n=1,
-        stop=None,
         temperature=0.7,
+        messages=messages
     )
 
-    return response.choices[0].message["content"].strip()
+    return response.content[0].text
 
 def update_user_progress(user_input, ai_feedback):
     # Extract feedback categories
