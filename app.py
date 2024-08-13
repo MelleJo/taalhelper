@@ -84,7 +84,19 @@ for message in st.session_state.conversation_history:
             english_text = sections[i+1].strip('()') if i+1 < len(sections) else ""
             
             if dutch_text:
-                st.markdown(f'<details><summary>{dutch_text}</summary>{english_text}</details>', unsafe_allow_html=True)
+                with st.expander(f"🇳🇱 {dutch_text}", expanded=True):
+                    st.write(f"🇬🇧 {english_text}")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if st.button("🔊 Spreek uit", key=f"speak_{i}"):
+                            st.write("Spraakfunctie nog niet geïmplementeerd.")
+                    with col2:
+                        if st.button("💡 Meer voorbeelden", key=f"examples_{i}"):
+                            st.write("Functie voor meer voorbeelden nog niet geïmplementeerd.")
+                    with col3:
+                        if st.button("❓ Vraag verduidelijking", key=f"clarify_{i}"):
+                            st.write("Verduidelijkingsfunctie nog niet geïmplementeerd.")
 
 if not user_input:
     st.warning("Voer alstublieft een Nederlandse zin in.")
